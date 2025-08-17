@@ -348,6 +348,34 @@ importers:
         specifier: workspace:*
         version: link:../tsconfig
 
+  pages/background:
+    dependencies:
+      '@extension/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+      '@extension/storage':
+        specifier: workspace:*
+        version: link:../../packages/storage
+    devDependencies:
+      '@extension/tsconfig':
+        specifier: workspace:*
+        version: link:../../packages/tsconfig
+      '@extension/vite-config':
+        specifier: workspace:*
+        version: link:../../packages/vite-config
+      '@types/chrome':
+        specifier: ^0.0.323
+        version: 0.0.323
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.0.1
+      typescript:
+        specifier: ^5.8.3
+        version: 5.8.3
+      vite:
+        specifier: ^6.3.5
+        version: 6.3.5(@types/node@22.15.21)(jiti@2.4.2)(sass@1.89.0)(terser@5.39.2)(tsx@4.19.4)(yaml@2.8.0)
+
   pages/content:
     dependencies:
       '@extension/env':
@@ -5706,7 +5734,6 @@ snapshots:
       '@types/react': 19.1.5
 
   '@types/react@19.1.5':
-
     dependencies:
       csstype: 3.1.3
 

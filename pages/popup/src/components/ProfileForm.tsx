@@ -1,12 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 interface ProfileFormProps {
   profile: any;
   onSave: (profile: any) => void;
+  onCancel?: () => void;
 }
 
-export const ProfileForm: React.FC<ProfileFormProps> = ({ profile, onSave }) => {
-  const [formData, setFormData] = useState(profile || {
+export const ProfileForm: React.FC<ProfileFormProps> = ({ profile, onSave, onCancel }) => {
+  const defaultProfile = {
     personalInfo: {
       firstName: '',
       lastName: '',
@@ -32,9 +33,31 @@ export const ProfileForm: React.FC<ProfileFormProps> = ({ profile, onSave }) => 
       workAuthorization: '',
       willingToRelocate: false,
     },
+  };
+
+  const [formData, setFormData] = useState(() => {
+    if (profile) {
+      return {
+        personalInfo: { ...defaultProfile.personalInfo, ...profile.personalInfo },
+        workInfo: { ...defaultProfile.workInfo, ...profile.workInfo },
+        preferences: { ...defaultProfile.preferences, ...profile.preferences },
+      };
+    }
+    return defaultProfile;
   });
 
   const [activeSection, setActiveSection] = useState<'personal' | 'work' | 'preferences'>('personal');
+
+  // Update form data when profile prop changes
+  useEffect(() => {
+    if (profile) {
+      setFormData({
+        personalInfo: { ...defaultProfile.personalInfo, ...profile.personalInfo },
+        workInfo: { ...defaultProfile.workInfo, ...profile.workInfo },
+        preferences: { ...defaultProfile.preferences, ...profile.preferences },
+      });
+    }
+  }, [profile]);
 
   const handleInputChange = (section: string, field: string, value: any) => {
     setFormData((prev: any) => ({
@@ -208,9 +231,9 @@ export const ProfileForm: React.FC<ProfileFormProps> = ({ profile, onSave }) => 
   );
 
   return (
-    <div>
+    <div className="flex flex-col h-full">
       {/* Section Navigation */}
-      <div className="flex mb-4 text-xs">
+      <div className="flex mb-4 text-xs flex-shrink-0">
         <button
           onClick={() => setActiveSection('personal')}
           className={`flex-1 py-1 px-2 rounded-l ${
@@ -238,19 +261,29 @@ export const ProfileForm: React.FC<ProfileFormProps> = ({ profile, onSave }) => 
       </div>
 
       {/* Form Content */}
-      <div className="mb-4">
+      <div className="mb-4 flex-1 overflow-y-auto">
         {activeSection === 'personal' && renderPersonalInfo()}
         {activeSection === 'work' && renderWorkInfo()}
         {activeSection === 'preferences' && renderPreferences()}
       </div>
 
-      {/* Save Button */}
-      <button
-        onClick={handleSave}
-        className="w-full py-2 bg-blue-600 text-white text-sm font-medium rounded hover:bg-blue-700"
-      >
-        Save Profile
-      </button>
+      {/* Action Buttons */}
+      <div className="flex space-x-2 flex-shrink-0">
+        <button
+          onClick={handleSave}
+          className="flex-1 py-2 bg-blue-600 text-white text-sm font-medium rounded hover:bg-blue-700"
+        >
+          Save Profile
+        </button>
+        {onCancel && (
+          <button
+            onClick={onCancel}
+            className="flex-1 py-2 bg-gray-300 text-gray-700 text-sm font-medium rounded hover:bg-gray-400"
+          >
+            Cancel
+          </button>
+        )}
+      </div>
     </div>
   );
 };

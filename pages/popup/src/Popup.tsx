@@ -10,6 +10,7 @@ const Popup = () => {
   const [activeTab, setActiveTab] = useState<'profile' | 'settings'>('profile');
   const [userProfile, setUserProfile] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [showEditForm, setShowEditForm] = useState(false);
 
   useEffect(() => {
     loadUserProfile();
@@ -36,9 +37,14 @@ const Popup = () => {
       });
       if (response.success) {
         setUserProfile(profile);
+        setShowEditForm(false); // Hide edit form after successful save
+      } else {
+        console.error('Failed to update profile:', response.error);
+        alert('Failed to save profile. Please try again.');
       }
     } catch (error) {
       console.error('Failed to update profile:', error);
+      alert('Failed to save profile. Please try again.');
     }
   };
 
@@ -78,15 +84,15 @@ const Popup = () => {
   }
 
   return (
-    <div className="w-96 h-96 bg-white">
+    <div className="w-96 min-h-[500px] max-h-[600px] bg-white flex flex-col">
       {/* Header */}
-      <div className="bg-blue-600 text-white p-4">
+      <div className="bg-blue-600 text-white p-3 flex-shrink-0">
         <h1 className="text-lg font-semibold">Job Autofill</h1>
         <p className="text-sm opacity-90">Manage your application data</p>
       </div>
 
       {/* Navigation */}
-      <div className="flex border-b">
+      <div className="flex border-b flex-shrink-0">
         <button
           onClick={() => setActiveTab('profile')}
           className={`flex-1 py-2 px-4 text-sm font-medium ${
@@ -110,19 +116,20 @@ const Popup = () => {
       </div>
 
       {/* Content */}
-      <div className="p-4 h-64 overflow-y-auto">
+      <div className="p-4 flex-1 overflow-y-auto">
         {activeTab === 'profile' && (
           <div>
-            {userProfile && Object.values(userProfile.personalInfo).some(v => v) ? (
+            {userProfile && Object.values(userProfile.personalInfo || {}).some(v => v) && !showEditForm ? (
               <ProfileView 
                 profile={userProfile} 
-                onEdit={() => setActiveTab('profile')}
+                onEdit={() => setShowEditForm(true)}
                 onExport={exportProfile}
               />
             ) : (
               <ProfileForm 
                 profile={userProfile}
                 onSave={handleProfileUpdate}
+                onCancel={() => setShowEditForm(false)}
               />
             )}
           </div>
@@ -134,7 +141,7 @@ const Popup = () => {
       </div>
 
       {/* Footer */}
-      <div className="border-t p-2 bg-gray-50">
+      <div className="border-t p-2 bg-gray-50 flex-shrink-0">
         <div className="flex justify-between items-center text-xs text-gray-600">
           <span>v0.5.0</span>
           <button

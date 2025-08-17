@@ -89,7 +89,7 @@ export class FormFieldMapper {
     Object.entries(this.fieldMappings).forEach(([fieldType, variations]) => {
       const matchingField = formFields.find(field => {
         const searchText = `${field.name} ${field.placeholder} ${field.label}`.toLowerCase();
-        return variations.some(variation => 
+        return variations.some(variation =>
           searchText.includes(variation.toLowerCase()) ||
           field.name.toLowerCase() === variation.toLowerCase()
         );
@@ -105,7 +105,7 @@ export class FormFieldMapper {
         if (matchingField.element.id) {
           selectors.push(`#${matchingField.element.id}`);
         }
-        
+
         mappedFields[fieldType] = selectors.join(', ');
       }
     });
@@ -132,7 +132,7 @@ export class FormFieldMapper {
         .filter(node => node.nodeType === Node.TEXT_NODE)
         .map(node => node.textContent?.trim())
         .filter(text => text && text.length > 0);
-      
+
       if (textNodes.length > 0) return textNodes[0] || '';
     }
 
@@ -153,7 +153,7 @@ export class FormFieldMapper {
       };
 
       const searchText = `${fieldInfo.name} ${fieldInfo.placeholder} ${fieldInfo.label}`.toLowerCase();
-      
+
       // Find potential matches
       Object.entries(this.fieldMappings).forEach(([fieldType, variations]) => {
         const confidence = variations.reduce((score, variation) => {

@@ -1,5 +1,7 @@
 import { storage } from '@extension/storage';
 
+/** ---------------------- Shared Types ---------------------- **/
+
 // Types for job application data
 interface UserProfile {
   personalInfo: {
@@ -36,10 +38,29 @@ interface SiteConfig {
   enabled: boolean;
 }
 
-// Initialize extension
-chrome.runtime.onInstalled.addListener(async (details) => {
+type FormValue = string | number | boolean;
+type FormDataMap = Record<string, FormValue>;
+
+type Success<T = unknown> = { success: true } & T;
+type Failure = { success: false; error: string };
+type ApiResponse<T = unknown> = Success<T> | Failure;
+
+type Resp<T = unknown> = (response: ApiResponse<T>) => void;
+
+/** Runtime messages */
+type RuntimeMessage =
+  | { type: 'GET_USER_PROFILE' }
+  | { type: 'UPDATE_USER_PROFILE'; profile: UserProfile }
+  | { type: 'GET_SITE_CONFIG'; domain: string }
+  | { type: 'UPDATE_SITE_CONFIG'; config: SiteConfig }
+  | { type: 'AUTOFILL_FORM'; data: FormDataMap }
+  | { type: 'DETECT_FORMS' };
+
+/** ---------------------- Install Init ---------------------- **/
+
+chrome.runtime.onInstalled.addListener(async details => {
   console.log('Job Application Autofill Extension installed:', details.reason);
-  
+
   // Initialize default user profile if not exists
   const existingProfile = await storage.userProfile.get();
   if (!existingProfile) {
@@ -115,82 +136,59 @@ chrome.runtime.onInstalled.addListener(async (details) => {
   }
 });
 
-// Handle messages from content scripts and popup
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  switch (message.type) {
-    case 'GET_USER_PROFILE':
-      handleGetUserProfile(sendResponse);
-      return true;
-    
-    case 'UPDATE_USER_PROFILE':
-      handleUpdateUserProfile(message.profile, sendResponse);
-      return true;
-    
-    case 'GET_SITE_CONFIG':
-      handleGetSiteConfig(message.domain, sendResponse);
-      return true;
-    
-    case 'UPDATE_SITE_CONFIG':
-      handleUpdateSiteConfig(message.config, sendResponse);
-      return true;
-    
-    case 'AUTOFILL_FORM':
-      handleAutofillForm(sender.tab?.id, message.data, sendResponse);
-      return true;
-    
-    case 'DETECT_FORMS':
-      handleDetectForms(sender.tab?.id, sendResponse);
-      return true;
-    
-    default:
-      console.warn('Unknown message type:', message.type);
-  }
-});
+/** ---------------------- Message Handlers ---------------------- **/
 
-async function handleGetUserProfile(sendResponse: (response: any) => void) {
+const handleGetUserProfile = async (sendResponse: Resp<{ profile: UserProfile | null }>): Promise<void> => {
   try {
     const profile = await storage.userProfile.get();
-    sendResponse({ success: true, profile });
-  } catch (error) {
-    console.error('Error getting user profile:', error);
-    sendResponse({ success: false, error: error.message });
+    sendResponse({ success: true, profile: profile ?? null });
+  } catch (err) {
+    console.error('Error getting user profile:', err);
+    const msg = err instanceof Error ? err.message : 'Unknown error';
+    sendResponse({ success: false, error: msg });
   }
-}
+};
 
-async function handleUpdateUserProfile(profile: UserProfile, sendResponse: (response: any) => void) {
+const handleUpdateUserProfile = async (profile: UserProfile, sendResponse: Resp): Promise<void> => {
   try {
     await storage.userProfile.set(profile);
     sendResponse({ success: true });
-  } catch (error) {
-    console.error('Error updating user profile:', error);
-    sendResponse({ success: false, error: error.message });
+  } catch (err) {
+    console.error('Error updating user profile:', err);
+    const msg = err instanceof Error ? err.message : 'Unknown error';
+    sendResponse({ success: false, error: msg });
   }
-}
+};
 
-async function handleGetSiteConfig(domain: string, sendResponse: (response: any) => void) {
+const handleGetSiteConfig = async (
+  domain: string,
+  sendResponse: Resp<{ config: SiteConfig | undefined }>,
+): Promise<void> => {
   try {
     const configs = await storage.siteConfigs.get();
     const config = configs?.[domain];
     sendResponse({ success: true, config });
-  } catch (error) {
-    console.error('Error getting site config:', error);
-    sendResponse({ success: false, error: error.message });
+  } catch (err) {
+    console.error('Error getting site config:', err);
+    const msg = err instanceof Error ? err.message : 'Unknown error';
+    sendResponse({ success: false, error: msg });
   }
-}
+};
 
-async function handleUpdateSiteConfig(config: SiteConfig, sendResponse: (response: any) => void) {
+const handleUpdateSiteConfig = async (config: SiteConfig, sendResponse: Resp): Promise<void> => {
   try {
-    const configs = await storage.siteConfigs.get() || {};
+    const configs = (await storage.siteConfigs.get()) || {};
     configs[config.domain] = config;
     await storage.siteConfigs.set(configs);
     sendResponse({ success: true });
-  } catch (error) {
-    console.error('Error updating site config:', error);
-    sendResponse({ success: false, error: error.message });
+  } catch (err) {
+    console.error('Error updating site config:', err);
+    const msg = err instanceof Error ? err.message : 'Unknown error';
+    sendResponse({ success: false, error: msg });
   }
-}
+};
 
-async function handleAutofillForm(tabId: number | undefined, data: any, sendResponse: (response: any) => void) {
+const handleAutofillForm = async (tabId: number | undefined, data: FormDataMap, sendResponse: Resp): Promise<void> => {
   if (!tabId) {
     sendResponse({ success: false, error: 'No tab ID provided' });
     return;
@@ -199,25 +197,37 @@ async function handleAutofillForm(tabId: number | undefined, data: any, sendResp
   try {
     await chrome.scripting.executeScript({
       target: { tabId },
-      func: (formData) => {
-        // This function runs in the content script context
-        const fillField = (selector: string, value: string) => {
+      // This function runs in the page context
+      func: (formData: FormDataMap) => {
+        const isTruthyValue = (value: FormValue): boolean => {
+          if (typeof value === 'boolean') return value;
+          if (typeof value === 'number') return value !== 0;
+          if (typeof value === 'string') {
+            const lowerValue = value.toLowerCase();
+            return lowerValue === 'true' || lowerValue === '1' || lowerValue === 'yes' || lowerValue === 'on';
+          }
+          return Boolean(value);
+        };
+
+        const fillField = (selector: string, value: FormValue): void => {
           const elements = document.querySelectorAll(selector);
-          elements.forEach((element: any) => {
-            if (element.type === 'checkbox' || element.type === 'radio') {
-              element.checked = value === 'true' || value === true;
+          elements.forEach(el => {
+            const element = el as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
+            const type = (element as HTMLInputElement).type;
+
+            if (type === 'checkbox' || type === 'radio') {
+              (element as HTMLInputElement).checked = isTruthyValue(value);
             } else {
-              element.value = value;
+              element.value = String(value);
               element.dispatchEvent(new Event('input', { bubbles: true }));
               element.dispatchEvent(new Event('change', { bubbles: true }));
             }
           });
         };
 
-        // Fill form fields based on the data provided
         Object.entries(formData).forEach(([key, value]) => {
-          if (value) {
-            fillField(`[name="${key}"], [id="${key}"], [data-field="${key}"]`, String(value));
+          if (value !== null && value !== undefined && value !== '') {
+            fillField(`[name="${key}"], [id="${key}"], [data-field="${key}"]`, value);
           }
         });
       },
@@ -225,13 +235,17 @@ async function handleAutofillForm(tabId: number | undefined, data: any, sendResp
     });
 
     sendResponse({ success: true });
-  } catch (error) {
-    console.error('Error autofilling form:', error);
-    sendResponse({ success: false, error: error.message });
+  } catch (err) {
+    console.error('Error autofilling form:', err);
+    const msg = err instanceof Error ? err.message : 'Unknown error';
+    sendResponse({ success: false, error: msg });
   }
-}
+};
 
-async function handleDetectForms(tabId: number | undefined, sendResponse: (response: any) => void) {
+const handleDetectForms = async (
+  tabId: number | undefined,
+  sendResponse: Resp<{ forms: unknown[] }>,
+): Promise<void> => {
   if (!tabId) {
     sendResponse({ success: false, error: 'No tab ID provided' });
     return;
@@ -240,19 +254,21 @@ async function handleDetectForms(tabId: number | undefined, sendResponse: (respo
   try {
     const results = await chrome.scripting.executeScript({
       target: { tabId },
+      // This function runs in the page context
       func: () => {
-        // This function runs in the content script context
-        const forms = Array.from(document.querySelectorAll('form'));
+        const forms = Array.from(document.querySelectorAll('form')) as HTMLFormElement[];
         const formData = forms.map((form, index) => {
-          const inputs = Array.from(form.querySelectorAll('input, select, textarea'));
-          const fields = inputs.map((input: any) => ({
+          const inputs = Array.from(form.querySelectorAll('input, select, textarea')) as Array<
+            HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
+          >;
+          const fields = inputs.map(input => ({
             name: input.name || input.id || `field_${index}`,
-            type: input.type || input.tagName.toLowerCase(),
-            placeholder: input.placeholder || '',
+            type: (input as HTMLInputElement).type || input.tagName.toLowerCase(),
+            placeholder: (input as HTMLInputElement).placeholder || '',
             label: input.labels?.[0]?.textContent || '',
-            required: input.required,
+            required: (input as HTMLInputElement).required ?? false,
           }));
-          
+
           return {
             index,
             action: form.action,
@@ -260,39 +276,76 @@ async function handleDetectForms(tabId: number | undefined, sendResponse: (respo
             fields,
           };
         });
-        
+
         return formData;
       },
     });
 
-    sendResponse({ success: true, forms: results[0]?.result || [] });
-  } catch (error) {
-    console.error('Error detecting forms:', error);
-    sendResponse({ success: false, error: error.message });
+    const forms = results[0]?.result ?? [];
+    sendResponse({ success: true, forms });
+  } catch (err) {
+    console.error('Error detecting forms:', err);
+    const msg = err instanceof Error ? err.message : 'Unknown error';
+    sendResponse({ success: false, error: msg });
   }
-}
+};
 
-// Handle tab updates to inject content scripts on job sites
+/** ---------------------- Message Router ---------------------- **/
+
+chrome.runtime.onMessage.addListener(
+  (message: RuntimeMessage, sender: chrome.runtime.MessageSender, sendResponse: Resp): boolean | void => {
+    switch (message.type) {
+      case 'GET_USER_PROFILE':
+        void handleGetUserProfile(sendResponse);
+        return true;
+
+      case 'UPDATE_USER_PROFILE':
+        void handleUpdateUserProfile(message.profile, sendResponse);
+        return true;
+
+      case 'GET_SITE_CONFIG':
+        void handleGetSiteConfig(message.domain, sendResponse);
+        return true;
+
+      case 'UPDATE_SITE_CONFIG':
+        void handleUpdateSiteConfig(message.config, sendResponse);
+        return true;
+
+      case 'AUTOFILL_FORM':
+        void handleAutofillForm(sender.tab?.id, message.data, sendResponse);
+        return true;
+
+      case 'DETECT_FORMS':
+        void handleDetectForms(sender.tab?.id, sendResponse);
+        return true;
+
+      default:
+        console.warn('Unknown message type:', (message as { type?: unknown })?.type);
+        return false;
+    }
+  },
+);
+
+/** ---------------------- Tab Updates ---------------------- **/
+
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
   if (changeInfo.status === 'complete' && tab.url) {
     const url = new URL(tab.url);
     const domain = url.hostname;
-    
-    // Check if this is a job site we support
+
     const configs = await storage.siteConfigs.get();
-    const isJobSite = configs && Object.keys(configs).some(configDomain => 
-      domain.includes(configDomain) && configs[configDomain].enabled
-    );
-    
+    const isJobSite =
+      !!configs &&
+      Object.keys(configs).some(configDomain => domain.includes(configDomain) && configs[configDomain].enabled);
+
     if (isJobSite) {
-      // Notify content script that this is a supported job site
       try {
         await chrome.tabs.sendMessage(tabId, {
           type: 'JOB_SITE_DETECTED',
           domain,
         });
-      } catch (error) {
-        // Content script might not be ready yet, that's okay
+      } catch {
+        // Content script might not be ready yet; that's okay
         console.log('Content script not ready for job site detection');
       }
     }

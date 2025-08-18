@@ -1,11 +1,14 @@
 {
-  "extends": "@extension/tsconfig/base",
+  "extends": "@extension/tsconfig/base.json",
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
       "@src/*": ["src/*"]
     },
-    "types": ["chrome", "node", "./tailwind.d.ts"]
+    "types": ["chrome", "node", "./tailwind.d.ts"],
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "jsx": "react-jsx"
   },
   "include": ["src", "tailwind.config.ts", "build.mts"]
 }

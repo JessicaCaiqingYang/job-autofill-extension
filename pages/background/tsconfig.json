@@ -1,16 +1,17 @@
 {
   "extends": "@extension/tsconfig/base.json",
   "compilerOptions": {
-    "lib": ["ES2023"],
+    "lib": ["ES2023", "DOM"],
     "target": "ES2022",
     "module": "ESNext",
+    "moduleResolution": "bundler",
     "skipLibCheck": true,
     "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
     "resolveJsonModule": true,
     "moduleDetection": "force",
     "isolatedModules": true,
-    "verbatimModuleSyntax": true,
-    "types": ["chrome"]
+    "types": ["chrome", "node"]
   },
   "include": ["src", "*.ts", "*.js"],
   "exclude": ["dist", "node_modules"]

@@ -151,10 +151,50 @@ const handleGetUserProfile = async (sendResponse: Resp<{ profile: UserProfile | 
 
 const handleUpdateUserProfile = async (profile: UserProfile, sendResponse: Resp): Promise<void> => {
   try {
-    await storage.userProfile.set(profile);
+    console.log('Background: Received profile update request:', profile);
+
+    // Validate profile structure
+    if (!profile || typeof profile !== 'object') {
+      throw new Error('Invalid profile data');
+    }
+
+    // Ensure all required sections exist with defaults.
+    const validatedProfile: UserProfile = {
+      personalInfo: {
+        firstName: profile.personalInfo?.firstName ?? '',
+        lastName: profile.personalInfo?.lastName ?? '',
+        email: profile.personalInfo?.email ?? '',
+        phone: profile.personalInfo?.phone ?? '',
+        address: profile.personalInfo?.address ?? '',
+        city: profile.personalInfo?.city ?? '',
+        state: profile.personalInfo?.state ?? '',
+        zipCode: profile.personalInfo?.zipCode ?? '',
+        country: profile.personalInfo?.country ?? '',
+      },
+      workInfo: {
+        currentTitle: profile.workInfo?.currentTitle ?? '',
+        experience: profile.workInfo?.experience ?? '',
+        skills: Array.isArray(profile.workInfo?.skills) ? profile.workInfo!.skills : [],
+        linkedinUrl: profile.workInfo?.linkedinUrl ?? '',
+        portfolioUrl: profile.workInfo?.portfolioUrl ?? '',
+        githubUrl: profile.workInfo?.githubUrl ?? '',
+      },
+      preferences: {
+        desiredSalary: profile.preferences?.desiredSalary ?? '',
+        availableStartDate: profile.preferences?.availableStartDate ?? '',
+        workAuthorization: profile.preferences?.workAuthorization ?? '',
+        willingToRelocate:
+          typeof profile.preferences?.willingToRelocate === 'boolean' ? profile.preferences!.willingToRelocate : false,
+      },
+    };
+
+    console.log('Background: Saving validated profile:', validatedProfile);
+    await storage.userProfile.set(validatedProfile);
+    console.log('Background: Profile saved successfully');
+
     sendResponse({ success: true });
   } catch (err) {
-    console.error('Error updating user profile:', err);
+    console.error('Background: Error updating user profile:', err);
     const msg = err instanceof Error ? err.message : 'Unknown error';
     sendResponse({ success: false, error: msg });
   }
@@ -294,6 +334,8 @@ const handleDetectForms = async (
 
 chrome.runtime.onMessage.addListener(
   (message: RuntimeMessage, sender: chrome.runtime.MessageSender, sendResponse: Resp): boolean | void => {
+    console.log('Background: Received message:', message.type, message);
+
     switch (message.type) {
       case 'GET_USER_PROFILE':
         void handleGetUserProfile(sendResponse);
@@ -320,7 +362,8 @@ chrome.runtime.onMessage.addListener(
         return true;
 
       default:
-        console.warn('Unknown message type:', (message as { type?: unknown })?.type);
+        console.warn('Background: Unknown message type:', (message as { type?: unknown })?.type);
+        sendResponse({ success: false, error: 'Unknown message type' });
         return false;
     }
   },
